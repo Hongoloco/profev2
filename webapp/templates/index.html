@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actualizador de Planillas Ocupacionales</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --secondary: #10B981;
+            --bg-color: #F3F4F6;
+            --card-bg: #FFFFFF;
+            --text-main: #1F2937;
+            --text-light: #6B7280;
+            --border-color: #E5E7EB;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: var(--text-light);
+            margin-bottom: 30px;
+        }
+
+        .file-upload-wrapper {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .file-upload-box {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 30px 20px;
+            transition: all 0.3s ease;
+            background-color: #F9FAFB;
+            cursor: pointer;
+        }
+
+        .file-upload-box:hover, .file-upload-box.dragover {
+            border-color: var(--primary);
+            background-color: #EEF2FF;
+        }
+
+        .file-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-upload-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 5px;
+        }
+
+        .file-upload-hint {
+            font-size: 13px;
+            color: var(--text-light);
+        }
+
+        .file-name-display {
+            display: block;
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--secondary);
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .submit-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 10px;
+            width: 100%;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .submit-btn:active {
+            transform: scale(0.98);
+        }
+        
+        .submit-btn:disabled {
+            background-color: #9CA3AF;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .flashes {
+            list-style: none;
+            margin-bottom: 20px;
+        }
+
+        .flashes li {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .flashes .error {
+            background-color: #FEE2E2;
+            color: #B91C1C;
+        }
+
+        .loader {
+            display: none;
+            margin: 15px auto;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 class="title">Actualizador de Planillas</h1>
+    <p class="subtitle">Sube el archivo Excel de origen y la planilla ODS de destino para generar tu archivo actualizado.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+        {% for category, message in messages %}
+          <li class="{{ category }}">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" enctype="multipart/form-data" id="uploadForm">
+        
+        <div class="file-upload-wrapper">
+            <div class="file-upload-box" id="box1">
+                <input type="file" name="source_file" id="source_file" class="file-input" accept=".xlsx, .xls" required>
+                <div class="file-upload-text">1. Profesionales (.xlsx)</div>
+                <div class="file-upload-hint">Haz clic o arrastra el archivo aquí</div>
+                <span class="file-name-display" id="name1"></span>
+            </div>
+        </div>
+
+        <div class="file-upload-wrapper">
+            <div class="file-upload-box" id="box2">
+                <input type="file" name="target_file" id="target_file" class="file-input" accept=".ods" required>
+                <div class="file-upload-text">2. Funcionarios por Grupo (.ods)</div>
+                <div class="file-upload-hint">Haz clic o arrastra el archivo aquí</div>
+                <span class="file-name-display" id="name2"></span>
+            </div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">Actualizar y Descargar</button>
+        <div class="loader" id="loader"></div>
+    </form>
+</div>
+
+<script>
+    function setupFileInput(inputId, nameId, boxId) {
+        const input = document.getElementById(inputId);
+        const nameDisplay = document.getElementById(nameId);
+        const box = document.getElementById(boxId);
+
+        input.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                nameDisplay.textContent = 'Seleccionado: ' + e.target.files[0].name;
+                box.style.borderColor = 'var(--secondary)';
+            } else {
+                nameDisplay.textContent = '';
+                box.style.borderColor = 'var(--border-color)';
+            }
+        });
+
+        box.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            box.classList.add('dragover');
+        });
+
+        box.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            box.classList.remove('dragover');
+        });
+
+        box.addEventListener('drop', (e) => {
+            e.preventDefault();
+            box.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                input.files = e.dataTransfer.files;
+                // Dispatch change event manually
+                const event = new Event('change');
+                input.dispatchEvent(event);
+            }
+        });
+    }
+
+    setupFileInput('source_file', 'name1', 'box1');
+    setupFileInput('target_file', 'name2', 'box2');
+
+    document.getElementById('uploadForm').addEventListener('submit', function() {
+        const btn = document.getElementById('submitBtn');
+        const loader = document.getElementById('loader');
+        
+        btn.disabled = true;
+        btn.textContent = 'Procesando...';
+        loader.style.display = 'block';
+        
+        // Timeout to re-enable button after download starts
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = 'Actualizar y Descargar';
+            loader.style.display = 'none';
+        }, 5000);
+    });
+</script>
+
+</body>
+</html>
