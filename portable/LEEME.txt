@@ -1,0 +1,16 @@
+Uso rapido:
+1) Comparti toda la carpeta portable.
+2) En la PC destino, doble clic en INICIAR_WEB.bat.
+3) El iniciador verifica Python y dependencias automaticamente.
+4) Si no hay Python, descarga un runtime portable en portable/runtime.
+5) Abre la web en http://127.0.0.1:5000/
+
+Estructura interna incluida:
+- portable/app/webapp/app.py
+- portable/app/webapp/templates/index.html
+- portable/app/requirements.txt
+
+Notas:
+- Requiere conexion a internet solo la primera vez para descargar runtime/dependencias.
+- Si portable/app/requirements.txt cambia, reinstala dependencias automaticamente.
+- No depende de archivos fuera de la carpeta portable.
