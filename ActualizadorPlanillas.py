@@ -104,21 +104,25 @@ def process_files(source_path, target_path):
             if 'TEC UNIVERS EN ADMINISTRACION' in norm_sp:
                 norm_sp = 'TECNICO UNIVERSITARIO EN ADMINISTRACION'
 
-            best_match = None
-            best_score = 0
+            exact_match = None
             for tr in target_rows:
-                score = similar(norm_sp, tr['norm_prof'])
-                if score > best_score:
-                    best_score = score
-                    best_match = tr['prof']
-                    
-            if best_score < 0.6:
-                prof_map[sp] = None
-            else:
-                prof_map[sp] = best_match
+                if tr['norm_prof'] == norm_sp:
+                    exact_match = tr['prof']
+                    break
+
+            # Solo acepta match exacto para evitar completar cargos/perfiles incorrectos.
+            prof_map[sp] = exact_match
 
         # 5. Fill the data
         changes_made = 0
+        # Reinicia base: limpia columnas FUNC/CFP (M/H) en todas las filas de cargos.
+        for tr in target_rows:
+            row_cells = all_rows[tr['row_idx']]
+            row_cells[6].set_value('')
+            row_cells[7].set_value('')
+            row_cells[8].set_value('')
+            row_cells[9].set_value('')
+
         for sp in data:
             tp = prof_map.get(sp)
             if not tp:
