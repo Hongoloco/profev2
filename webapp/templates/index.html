@@ -237,6 +237,61 @@
             line-height: 1.45;
         }
 
+        .audit-grid {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .audit-card {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px;
+            background: #F8FAFC;
+            text-align: center;
+        }
+
+        .audit-card .metric-label {
+            margin-bottom: 4px;
+        }
+
+        .exclusion-box {
+            margin-top: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: #FFFFFF;
+            overflow: hidden;
+        }
+
+        .exclusion-title {
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+            background: #F8FAFC;
+        }
+
+        .exclusion-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .exclusion-table th,
+        .exclusion-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #EDF2F7;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .exclusion-table th {
+            color: var(--text-light);
+            font-weight: 600;
+            background: #FCFDFE;
+        }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -245,7 +300,8 @@
         @media (max-width: 850px) {
             .upload-grid,
             .charts-grid,
-            .metrics {
+            .metrics,
+            .audit-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -300,7 +356,7 @@
     <div class="results">
         <div class="metrics">
             <div class="metric-card">
-                <div class="metric-label">Total personas</div>
+                <div class="metric-label">Total cargado</div>
                 <div class="metric-value">{{ result_summary.total_personas }}</div>
             </div>
             <div class="metric-card">
@@ -314,6 +370,21 @@
             <div class="metric-card">
                 <div class="metric-label">Provisorio detectado</div>
                 <div class="metric-value">{{ result_summary.provisorio_detectado }}</div>
+            </div>
+        </div>
+
+        <div class="audit-grid">
+            <div class="audit-card">
+                <div class="metric-label">Total en fuente</div>
+                <div class="metric-value">{{ result_summary.total_fuente_personas }}</div>
+            </div>
+            <div class="audit-card">
+                <div class="metric-label">Total cargado destino</div>
+                <div class="metric-value">{{ result_summary.total_personas }}</div>
+            </div>
+            <div class="audit-card">
+                <div class="metric-label">Excluidas</div>
+                <div class="metric-value">{{ result_summary.total_excluidas }}</div>
             </div>
         </div>
 
@@ -334,6 +405,34 @@
             <div>Cambios aplicados: {{ result_summary.changes_made }} | Sin mapeo: {{ result_summary.unmapped_count }} | Combinaciones faltantes: {{ result_summary.missing_count }}</div>
             <div>Pestañas exportadas: {{ result_summary.sheet_names|join(', ') }}</div>
         </div>
+
+        {% if result_summary.exclusion_details %}
+        <div class="exclusion-box">
+            <div class="exclusion-title">Detalle de Excluidas (Fuente no cargada en destino)</div>
+            <table class="exclusion-table">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Profesión fuente</th>
+                        <th>Perfil destino</th>
+                        <th>Cargo</th>
+                        <th>Personas</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in result_summary.exclusion_details %}
+                    <tr>
+                        <td>{{ item.type }}</td>
+                        <td>{{ item.source_prof }}</td>
+                        <td>{{ item.target_prof }}</td>
+                        <td>{{ item.cargo }}</td>
+                        <td>{{ item.people }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 </div>

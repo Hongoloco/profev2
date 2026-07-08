@@ -33,6 +33,20 @@ PROF_ALIASES = {
     'DISEO INDUSTR/APLICADO': 'LICENCIADO EN DISENO INDUSTRIAL',
     'DISENO INDUSTR/APLICADO': 'LICENCIADO EN DISENO INDUSTRIAL',
     'TEC UNIVERS EN ADMINISTRACION': 'TECNICO UNIVERSITARIO EN ADMINISTRACION',
+    'ING ELECTR/TELECOMUN/POTENCIA': 'ING. ELECTRICISTA/TELECOMUNIC./POTENCIA',
+    'LIC EN INFORM/SISTEMAS/COMPUT': 'LIC. EN INFORM/SISTEMAS/COMPUTACION',
+    'ING TECNOLOGICO (OP PREVENC': 'INGENIERO TECNOLOGICO',
+    'LIC EN RELAC INTERNACIONALES': 'LIC. EN RELACIONES INTERNACIONALES',
+    'TECNOLOGO EN TELECOMUNIC': 'TECNOLOGO EN TELECOMUNICACIONES',
+    'LICENCIADO/A EN TEC DE LA INF': 'LICENCIADO EN TECNOLOGIAS DE LA INFORMACION',
+    'LICENCIADO EN ARTES': 'LICENCIADO EN ARTE',
+    'MAESTRO TEC EN MEC INDUSTRIA': 'TECNOLOGO MECANICO',
+    'LICENCIADO EN ING AUDIOVISUAL': 'LICENCIADO EN INGENIERIA AUDIOVISUAL',
+    'TECNOLOGO EN ADM Y CONTABIL': 'TECNOLOGO EN ADMINISTRACION Y CONTABILIDAD',
+    'LICENCIADO EN TELECOMUNICAC': 'LICENCIADO EN TELECOMUNICACIONES',
+    'LICENCIA EN NUTRICION': 'LICENCIADO EN NUTRICION',
+    'LNGENIERO/A TELEMATICO/A': 'INGENIERO TELEMATICO',
+    'INGENIERO/A TELEMATICO/A': 'INGENIERO TELEMATICO',
 }
 
 def normalize_text(text):
@@ -157,7 +171,7 @@ def parse_target(target_path):
 
 def build_profession_totals_from_target_rows(all_rows, target_rows):
     # Agrupa solo grupo P usando lo efectivamente escrito en la hoja principal.
-    by_prof_level = defaultdict(lambda: {'A': 0, 'B': 0})
+    by_prof_level = defaultdict(lambda: {'A': 0, 'B': 0, 'ALL': 0})
     by_level_series = defaultdict(lambda: defaultdict(int))
 
     for tr in target_rows:
@@ -176,6 +190,7 @@ def build_profession_totals_from_target_rows(all_rows, target_rows):
             continue
 
         target_prof = tr['prof']
+        by_prof_level[target_prof]['ALL'] += total
         if level in ('A', 'B'):
             by_prof_level[target_prof][level] += total
 
@@ -193,6 +208,7 @@ def fill_sheet_prof_ab(doc, by_prof_level):
 
     total_a = 0
     total_b = 0
+    total_all = 0
 
     for row_cells in rows:
         prof_name = row_cells[3].value
@@ -209,25 +225,39 @@ def fill_sheet_prof_ab(doc, by_prof_level):
         norm_prof = normalize_text(prof_name_clean)
         a_value = 0
         b_value = 0
+        all_value = 0
+
+        best_totals = None
+        best_score = 0
+        second_score = 0
         for target_prof, totals in by_prof_level.items():
-            if normalize_text(target_prof) == norm_prof:
-                a_value = totals.get('A', 0)
-                b_value = totals.get('B', 0)
-                break
+            score = similar(norm_prof, normalize_text(target_prof))
+            if score > best_score:
+                second_score = best_score
+                best_score = score
+                best_totals = totals
+            elif score > second_score:
+                second_score = score
+
+        if best_totals and best_score >= 0.62 and (best_score - second_score) >= 0.02:
+            a_value = best_totals.get('A', 0)
+            b_value = best_totals.get('B', 0)
+            all_value = best_totals.get('ALL', 0)
 
         set_numeric_or_blank_no_formula(row_cells[4], a_value)
         set_numeric_or_blank_no_formula(row_cells[5], b_value)
-        set_numeric_or_blank_no_formula(row_cells[6], a_value + b_value)
+        set_numeric_or_blank_no_formula(row_cells[6], all_value)
 
         total_a += a_value
         total_b += b_value
+        total_all += all_value
 
     for row_cells in rows:
         label = row_cells[2].value
         if isinstance(label, str) and normalize_text(label) == 'TOTAL':
             set_numeric_or_blank_no_formula(row_cells[4], total_a)
             set_numeric_or_blank_no_formula(row_cells[5], total_b)
-            set_numeric_or_blank_no_formula(row_cells[6], total_a + total_b)
+            set_numeric_or_blank_no_formula(row_cells[6], total_all)
             break
 
 def fill_sheet_level_series(doc, by_level_series):
@@ -314,6 +344,44 @@ def build_profession_map(source_data, target_rows):
         unmapped.append({'source_prof': sp, 'best_match': best_match, 'score': round(best_score, 3)})
 
     return prof_map, unmapped
+
+def cargo_distance(requested_cargo, candidate_cargo):
+    req_parts = str(requested_cargo).split('.')
+    cand_parts = str(candidate_cargo).split('.')
+    if len(req_parts) != 3 or len(cand_parts) != 3:
+        return 9999
+
+    req_group, req_series, req_level = req_parts
+    cand_group, cand_series, cand_level = cand_parts
+
+    if req_group != cand_group:
+        return 9999
+
+    series_penalty = abs(int(req_series) - int(cand_series)) * 10
+    level_penalty = abs(ord(req_level) - ord(cand_level))
+    return series_penalty + level_penalty
+
+def resolve_target_row(target_rows_by_prof, target_index, target_prof, source_cargo):
+    exact_row_idx = target_index.get((target_prof, source_cargo))
+    if exact_row_idx is not None:
+        return exact_row_idx, source_cargo, False
+
+    candidates = target_rows_by_prof.get(target_prof, [])
+    if not candidates:
+        return None, None, False
+
+    best = None
+    best_distance = 9999
+    for candidate in candidates:
+        dist = cargo_distance(source_cargo, candidate['cargo'])
+        if dist < best_distance:
+            best_distance = dist
+            best = candidate
+
+    if best is None or best_distance >= 9999:
+        return None, None, False
+
+    return best['row_idx'], best['cargo'], True
 
 def set_numeric_or_blank(cell, value):
     if value and int(value) > 0:
@@ -448,7 +516,7 @@ def rebuild_totals_and_chart_data(all_rows, target_rows):
         if 'SUM([.R' in f17:
             set_numeric_or_blank_no_formula(row_cells[17], 1.0 if chart_total > 0 else 0.0)
 
-def build_processing_summary(source_data, source_stats, changes_made, unmapped, missing_combinations, sheet_names):
+def build_processing_summary(source_data, source_stats, loaded_totals, changes_made, unmapped, missing_combinations, sheet_names):
     cargo_totals = defaultdict(int)
     profession_totals = defaultdict(int)
 
@@ -470,18 +538,63 @@ def build_processing_summary(source_data, source_stats, changes_made, unmapped, 
     permanent_totals = source_stats['effective_status_totals'].get('PERMANENTE', {'HOMBRE': 0, 'MUJER': 0})
     provisorio_raw = source_stats['raw_status_totals'].get('PROVISORIO', {'HOMBRE': 0, 'MUJER': 0})
 
+    total_fuente_h = int(permanent_totals.get('HOMBRE', 0))
+    total_fuente_m = int(permanent_totals.get('MUJER', 0))
+    total_fuente = total_fuente_h + total_fuente_m
+
+    total_cargado_h = int(loaded_totals.get('HOMBRE', 0))
+    total_cargado_m = int(loaded_totals.get('MUJER', 0))
+    total_cargado = total_cargado_h + total_cargado_m
+
+    unmapped_with_people = []
+    for item in unmapped:
+        src_prof = item.get('source_prof')
+        people = 0
+        if src_prof in source_data:
+            for by_gender in source_data[src_prof].values():
+                people += int(by_gender.get('MUJER', 0)) + int(by_gender.get('HOMBRE', 0))
+        if people > 0:
+            unmapped_with_people.append({
+                'type': 'SIN_MAPEO_PROFESION',
+                'source_prof': src_prof,
+                'target_prof': item.get('best_match') or '',
+                'cargo': '',
+                'people': people,
+            })
+
+    missing_with_people = [
+        {
+            'type': 'SIN_CARGO_EN_DESTINO',
+            'source_prof': item.get('source_prof', ''),
+            'target_prof': item.get('target_prof', ''),
+            'cargo': item.get('cargo', ''),
+            'people': int(item.get('people', 0)),
+        }
+        for item in missing_combinations
+        if int(item.get('people', 0)) > 0
+    ]
+
+    exclusion_details = sorted(
+        unmapped_with_people + missing_with_people,
+        key=lambda x: int(x.get('people', 0)),
+        reverse=True,
+    )
+
     return {
         'total_profesiones': len(source_data),
         'total_cargos': len(cargo_totals),
-        'total_hombres': int(permanent_totals.get('HOMBRE', 0)),
-        'total_mujeres': int(permanent_totals.get('MUJER', 0)),
-        'total_personas': int(permanent_totals.get('HOMBRE', 0)) + int(permanent_totals.get('MUJER', 0)),
+        'total_hombres': total_cargado_h,
+        'total_mujeres': total_cargado_m,
+        'total_personas': total_cargado,
+        'total_fuente_personas': total_fuente,
+        'total_excluidas': total_fuente - total_cargado,
         'provisorio_detectado': int(provisorio_raw.get('HOMBRE', 0)) + int(provisorio_raw.get('MUJER', 0)),
         'top_cargos': top_cargos,
         'top_profesiones': top_professions,
         'changes_made': changes_made,
         'unmapped_count': len(unmapped),
         'missing_count': len(missing_combinations),
+        'exclusion_details': exclusion_details,
         'sheet_names': sheet_names,
     }
 
@@ -510,28 +623,58 @@ def process_files(source_path, target_path, output_path):
     prof_map, unmapped = build_profession_map(source_data, target_rows)
 
     target_index = {}
+    target_rows_by_prof = defaultdict(list)
     for tr in target_rows:
         target_index[(tr['prof'], tr['cargo'])] = tr['row_idx']
+        target_rows_by_prof[tr['prof']].append(tr)
 
     changes_made = 0
+    loaded_totals = {'MUJER': 0, 'HOMBRE': 0}
+    row_accumulator = defaultdict(lambda: {'MUJER': 0, 'HOMBRE': 0})
+    fallback_applied = []
     missing_combinations = []
     for sp in source_data:
         tp = prof_map.get(sp)
         if not tp:
             continue
         for cargo in source_data[sp]:
-            target_row_idx = target_index.get((tp, cargo))
+            target_row_idx, resolved_cargo, used_fallback = resolve_target_row(
+                target_rows_by_prof=target_rows_by_prof,
+                target_index=target_index,
+                target_prof=tp,
+                source_cargo=cargo,
+            )
             
             if target_row_idx is not None:
-                row_cells = all_rows[target_row_idx]
                 mujeres = source_data[sp][cargo].get('MUJER', 0)
                 hombres = source_data[sp][cargo].get('HOMBRE', 0)
 
-                set_numeric_or_blank(row_cells[6], mujeres)
-                set_numeric_or_blank(row_cells[7], hombres)
+                row_accumulator[target_row_idx]['MUJER'] += int(mujeres)
+                row_accumulator[target_row_idx]['HOMBRE'] += int(hombres)
+                loaded_totals['MUJER'] += int(mujeres)
+                loaded_totals['HOMBRE'] += int(hombres)
                 changes_made += 1
+
+                if used_fallback:
+                    fallback_applied.append({
+                        'source_prof': sp,
+                        'target_prof': tp,
+                        'source_cargo': cargo,
+                        'target_cargo': resolved_cargo,
+                        'people': int(mujeres) + int(hombres),
+                    })
             else:
-                missing_combinations.append({'source_prof': sp, 'target_prof': tp, 'cargo': cargo})
+                missing_combinations.append({
+                    'source_prof': sp,
+                    'target_prof': tp,
+                    'cargo': cargo,
+                    'people': int(source_data[sp][cargo].get('MUJER', 0)) + int(source_data[sp][cargo].get('HOMBRE', 0)),
+                })
+
+    for row_idx, totals in row_accumulator.items():
+        row_cells = all_rows[row_idx]
+        set_numeric_or_blank(row_cells[6], totals['MUJER'])
+        set_numeric_or_blank(row_cells[7], totals['HOMBRE'])
 
     rebuild_totals_and_chart_data(all_rows, target_rows)
     by_prof_level, by_level_series = build_profession_totals_from_target_rows(all_rows, target_rows)
@@ -542,6 +685,7 @@ def process_files(source_path, target_path, output_path):
     summary = build_processing_summary(
         source_data=source_data,
         source_stats=source_stats,
+        loaded_totals=loaded_totals,
         changes_made=changes_made,
         unmapped=unmapped,
         missing_combinations=missing_combinations,
@@ -551,6 +695,7 @@ def process_files(source_path, target_path, output_path):
         'changes_made': changes_made,
         'unmapped': unmapped,
         'missing_combinations': missing_combinations,
+        'fallback_applied': fallback_applied,
         'summary': summary,
     }
 
