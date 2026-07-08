@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Actualizador de Planillas Ocupacionales</title>
+    <title>ANTEL - Actualizador de Planillas</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         :root {
-            --primary: #4F46E5;
-            --primary-hover: #4338CA;
-            --secondary: #10B981;
-            --bg-color: #F3F4F6;
+            --primary: #0B5E8E;
+            --primary-hover: #0A4D74;
+            --secondary: #109B7A;
+            --bg-color: #EEF3F8;
             --card-bg: #FFFFFF;
-            --text-main: #1F2937;
-            --text-light: #6B7280;
-            --border-color: #E5E7EB;
+            --text-main: #1E293B;
+            --text-light: #64748B;
+            --border-color: #D8E0EA;
         }
 
         * {
@@ -27,53 +28,60 @@
         body {
             background-color: var(--bg-color);
             color: var(--text-main);
-            display: flex;
-            justify-content: center;
-            align-items: center;
             min-height: 100vh;
             padding: 20px;
         }
 
         .container {
             background: var(--card-bg);
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            padding: 32px;
+            border-radius: 18px;
+            box-shadow: 0 12px 30px rgba(17, 24, 39, 0.08);
             width: 100%;
-            max-width: 500px;
-            text-align: center;
+            max-width: 980px;
+            margin: 0 auto;
         }
 
         .title {
-            font-size: 24px;
+            font-size: 28px;
             font-weight: 700;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             color: var(--primary);
+            text-align: center;
         }
 
         .subtitle {
             font-size: 14px;
             color: var(--text-light);
-            margin-bottom: 30px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
         }
 
         .file-upload-wrapper {
             position: relative;
-            margin-bottom: 20px;
         }
 
         .file-upload-box {
             border: 2px dashed var(--border-color);
             border-radius: 12px;
-            padding: 30px 20px;
-            transition: all 0.3s ease;
-            background-color: #F9FAFB;
+            padding: 26px 18px;
+            transition: all 0.25s ease;
+            background-color: #F8FAFC;
             cursor: pointer;
+            min-height: 150px;
         }
 
-        .file-upload-box:hover, .file-upload-box.dragover {
+        .file-upload-box:hover,
+        .file-upload-box.dragover {
             border-color: var(--primary);
-            background-color: #EEF2FF;
+            background-color: #EDF6FD;
         }
 
         .file-input {
@@ -88,7 +96,7 @@
 
         .file-upload-text {
             font-size: 15px;
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-main);
             margin-bottom: 5px;
         }
@@ -107,11 +115,12 @@
             word-break: break-all;
         }
 
-        .submit-btn {
+        .submit-btn,
+        .download-btn {
             background-color: var(--primary);
             color: white;
             border: none;
-            padding: 14px 24px;
+            padding: 13px 22px;
             font-size: 16px;
             font-weight: 600;
             border-radius: 10px;
@@ -119,16 +128,21 @@
             cursor: pointer;
             transition: background-color 0.3s ease, transform 0.1s ease;
             margin-top: 10px;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
         }
 
-        .submit-btn:hover {
+        .submit-btn:hover,
+        .download-btn:hover {
             background-color: var(--primary-hover);
         }
 
-        .submit-btn:active {
+        .submit-btn:active,
+        .download-btn:active {
             transform: scale(0.98);
         }
-        
+
         .submit-btn:disabled {
             background-color: #9CA3AF;
             cursor: not-allowed;
@@ -137,11 +151,11 @@
 
         .flashes {
             list-style: none;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
 
         .flashes li {
-            padding: 12px;
+            padding: 10px 12px;
             border-radius: 8px;
             font-size: 14px;
             font-weight: 500;
@@ -154,26 +168,98 @@
 
         .loader {
             display: none;
-            margin: 15px auto;
-            border: 4px solid #f3f3f3;
+            margin: 14px auto;
+            border: 4px solid #E2E8F0;
             border-top: 4px solid var(--primary);
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
+            width: 28px;
+            height: 28px;
             animation: spin 1s linear infinite;
+        }
+
+        .results {
+            margin-top: 26px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 22px;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .metric-card {
+            background: #F8FAFC;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .chart-card {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px;
+            background: #FFFFFF;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-main);
+        }
+
+        .meta {
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--text-light);
+            line-height: 1.45;
         }
 
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        @media (max-width: 850px) {
+            .upload-grid,
+            .charts-grid,
+            .metrics {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 22px;
+            }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1 class="title">Actualizador de Planillas</h1>
-    <p class="subtitle">Sube el archivo Excel de origen y la planilla ODS de destino para generar tu archivo actualizado.</p>
+    <h1 class="title">ANTEL - Actualizador de Planillas</h1>
+    <p class="subtitle">Carga Profesionales y Funcionarios por Grupo para actualizar el ODS, validar datos y ver gráficas del resultado.</p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -186,28 +272,70 @@
     {% endwith %}
 
     <form method="POST" enctype="multipart/form-data" id="uploadForm">
-        
-        <div class="file-upload-wrapper">
-            <div class="file-upload-box" id="box1">
-                <input type="file" name="source_file" id="source_file" class="file-input" accept=".xlsx, .xls" required>
-                <div class="file-upload-text">1. Profesionales (.xlsx)</div>
-                <div class="file-upload-hint">Haz clic o arrastra el archivo aquí</div>
-                <span class="file-name-display" id="name1"></span>
+        <div class="upload-grid">
+            <div class="file-upload-wrapper">
+                <div class="file-upload-box" id="box1">
+                    <input type="file" name="source_file" id="source_file" class="file-input" accept=".xlsx, .xls" required>
+                    <div class="file-upload-text">1. Profesionales (.xlsx)</div>
+                    <div class="file-upload-hint">Haz clic o arrastra el archivo aquí</div>
+                    <span class="file-name-display" id="name1"></span>
+                </div>
+            </div>
+
+            <div class="file-upload-wrapper">
+                <div class="file-upload-box" id="box2">
+                    <input type="file" name="target_file" id="target_file" class="file-input" accept=".ods" required>
+                    <div class="file-upload-text">2. Funcionarios por Grupo (.ods)</div>
+                    <div class="file-upload-hint">Haz clic o arrastra el archivo aquí</div>
+                    <span class="file-name-display" id="name2"></span>
+                </div>
             </div>
         </div>
 
-        <div class="file-upload-wrapper">
-            <div class="file-upload-box" id="box2">
-                <input type="file" name="target_file" id="target_file" class="file-input" accept=".ods" required>
-                <div class="file-upload-text">2. Funcionarios por Grupo (.ods)</div>
-                <div class="file-upload-hint">Haz clic o arrastra el archivo aquí</div>
-                <span class="file-name-display" id="name2"></span>
-            </div>
-        </div>
-
-        <button type="submit" class="submit-btn" id="submitBtn">Actualizar y Descargar</button>
+        <button type="submit" class="submit-btn" id="submitBtn">Procesar Datos</button>
         <div class="loader" id="loader"></div>
     </form>
+
+    {% if result_summary %}
+    <div class="results">
+        <div class="metrics">
+            <div class="metric-card">
+                <div class="metric-label">Total personas</div>
+                <div class="metric-value">{{ result_summary.total_personas }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Mujeres</div>
+                <div class="metric-value">{{ result_summary.total_mujeres }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Hombres</div>
+                <div class="metric-value">{{ result_summary.total_hombres }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Provisorio detectado</div>
+                <div class="metric-value">{{ result_summary.provisorio_detectado }}</div>
+            </div>
+        </div>
+
+        <a id="downloadBtn" class="download-btn" href="{{ url_for('download_processed_file', token=download_token) }}">Descargar {{ output_filename }}</a>
+
+        <div class="charts-grid" style="margin-top: 16px;">
+            <div class="chart-card">
+                <div class="chart-title">Distribución por sexo</div>
+                <canvas id="genderChart" height="180"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">Top cargos por cantidad</div>
+                <canvas id="cargoChart" height="180"></canvas>
+            </div>
+        </div>
+
+        <div class="meta">
+            <div>Cambios aplicados: {{ result_summary.changes_made }} | Sin mapeo: {{ result_summary.unmapped_count }} | Combinaciones faltantes: {{ result_summary.missing_count }}</div>
+            <div>Pestañas exportadas: {{ result_summary.sheet_names|join(', ') }}</div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script>
@@ -226,24 +354,22 @@
             }
         });
 
-        box.addEventListener('dragover', (e) => {
+        box.addEventListener('dragover', function(e) {
             e.preventDefault();
             box.classList.add('dragover');
         });
 
-        box.addEventListener('dragleave', (e) => {
+        box.addEventListener('dragleave', function(e) {
             e.preventDefault();
             box.classList.remove('dragover');
         });
 
-        box.addEventListener('drop', (e) => {
+        box.addEventListener('drop', function(e) {
             e.preventDefault();
             box.classList.remove('dragover');
             if (e.dataTransfer.files.length > 0) {
                 input.files = e.dataTransfer.files;
-                // Dispatch change event manually
-                const event = new Event('change');
-                input.dispatchEvent(event);
+                input.dispatchEvent(new Event('change'));
             }
         });
     }
@@ -254,18 +380,58 @@
     document.getElementById('uploadForm').addEventListener('submit', function() {
         const btn = document.getElementById('submitBtn');
         const loader = document.getElementById('loader');
-        
         btn.disabled = true;
         btn.textContent = 'Procesando...';
         loader.style.display = 'block';
-        
-        // Timeout to re-enable button after download starts
-        setTimeout(() => {
-            btn.disabled = false;
-            btn.textContent = 'Actualizar y Descargar';
-            loader.style.display = 'none';
-        }, 5000);
     });
+
+    {% if result_summary %}
+    const summary = {{ result_summary | tojson }};
+
+    const genderCtx = document.getElementById('genderChart');
+    new Chart(genderCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Mujeres', 'Hombres'],
+            datasets: [{
+                data: [summary.total_mujeres, summary.total_hombres],
+                backgroundColor: ['#109B7A', '#0B5E8E']
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    const cargoCtx = document.getElementById('cargoChart');
+    const cargoLabels = summary.top_cargos.map(function(item) { return item.label; });
+    const cargoValues = summary.top_cargos.map(function(item) { return item.total; });
+
+    new Chart(cargoCtx, {
+        type: 'bar',
+        data: {
+            labels: cargoLabels,
+            datasets: [{
+                label: 'Cantidad',
+                data: cargoValues,
+                backgroundColor: '#0B5E8E'
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0 }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+    {% endif %}
 </script>
 
 </body>

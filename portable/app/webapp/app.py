@@ -10,11 +10,17 @@ import re
 import io
 import shutil
 import time
+from uuid import uuid4
+from collections import defaultdict
+
+TABLE_FORMULA_ATTR = '{urn:oasis:names:tc:opendocument:xmlns:table:1.0}formula'
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_flash_messages'
 
 CARGO_PATTERN = re.compile(r'^P\.\d{2}\.[A-Z]$')
+DOWNLOAD_CACHE = {}
+CACHE_TTL_SECONDS = 20 * 60
 
 # Abreviaturas y nombres alternativos frecuentes del origen.
 PROF_ALIASES = {
@@ -50,6 +56,16 @@ def source_prof_key(value):
             return normalize_text(alias_target)
     return norm
 
+def detect_employment_status(value):
+    norm = normalize_text(value)
+    if not norm:
+        return None
+    if 'PROVIS' in norm:
+        return 'PROVISORIO'
+    if 'PERMAN' in norm:
+        return 'PERMANENTE'
+    return None
+
 def parse_source(source_path):
     df_prof = pd.read_excel(source_path)
     if len(df_prof.columns) < 2:
@@ -61,6 +77,14 @@ def parse_source(source_path):
     data = {}
     current_cargo = None
     current_prof = None
+    current_status = 'PERMANENTE'
+    raw_status_totals = {
+        'PERMANENTE': {'HOMBRE': 0, 'MUJER': 0},
+        'PROVISORIO': {'HOMBRE': 0, 'MUJER': 0},
+    }
+    effective_status_totals = {
+        'PERMANENTE': {'HOMBRE': 0, 'MUJER': 0},
+    }
 
     for _, row in df_prof.iterrows():
         raw_val = row[first_col]
@@ -71,18 +95,36 @@ def parse_source(source_path):
         if not val or upper_val in {'ETIQUETAS DE FILA', 'TOTAL GENERAL', 'NAN'}:
             continue
 
+        status = detect_employment_status(upper_val)
+        if status:
+            current_status = status
+            continue
+
         if is_cargo_code(upper_val):
             current_cargo = upper_val
             continue
 
         if upper_val in {'HOMBRE', 'MUJER'}:
             if current_cargo and current_prof and not pd.isna(count):
-                data.setdefault(current_prof, {}).setdefault(current_cargo, {})[upper_val] = int(count)
+                count_value = int(count)
+                data.setdefault(current_prof, {}).setdefault(current_cargo, {}).setdefault(upper_val, 0)
+                data[current_prof][current_cargo][upper_val] += count_value
+
+                raw_status_totals.setdefault(current_status, {'HOMBRE': 0, 'MUJER': 0})
+                raw_status_totals[current_status][upper_val] += count_value
+
+                # Regla de negocio: provisorio computa como permanente.
+                effective_status = 'PERMANENTE' if current_status == 'PROVISORIO' else current_status
+                effective_status_totals.setdefault(effective_status, {'HOMBRE': 0, 'MUJER': 0})
+                effective_status_totals[effective_status][upper_val] += count_value
             continue
 
         current_prof = val
 
-    return data
+    return data, {
+        'raw_status_totals': raw_status_totals,
+        'effective_status_totals': effective_status_totals,
+    }
 
 def parse_target(target_path):
     doc = ezodf.opendoc(target_path)
@@ -168,9 +210,81 @@ def cleanup_temp_dir(path):
 
     shutil.rmtree(path, ignore_errors=True)
 
+def clean_broken_ref_formulas(all_rows):
+    for row in all_rows:
+        for cell in row:
+            formula = getattr(cell, 'formula', None)
+            if formula and '#REF' in str(formula).upper():
+                # La plantilla base trae algunas formulas corruptas of:=[.#REF!].
+                # Las removemos para evitar que el archivo exportado muestre #REF!.
+                cell.xmlnode.attrib.pop(TABLE_FORMULA_ATTR, None)
+                cell.set_value('')
+
+def reset_target_gender_columns(all_rows, target_rows):
+    for tr in target_rows:
+        row_cells = all_rows[tr['row_idx']]
+        row_cells[6].set_value('')
+        row_cells[7].set_value('')
+
+def build_processing_summary(source_data, source_stats, changes_made, unmapped, missing_combinations, sheet_names):
+    cargo_totals = defaultdict(int)
+    profession_totals = defaultdict(int)
+
+    for prof, cargos in source_data.items():
+        for cargo, by_gender in cargos.items():
+            total = int(by_gender.get('MUJER', 0)) + int(by_gender.get('HOMBRE', 0))
+            cargo_totals[cargo] += total
+            profession_totals[prof] += total
+
+    top_cargos = [
+        {'label': cargo, 'total': total}
+        for cargo, total in sorted(cargo_totals.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+    top_professions = [
+        {'label': prof, 'total': total}
+        for prof, total in sorted(profession_totals.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+
+    permanent_totals = source_stats['effective_status_totals'].get('PERMANENTE', {'HOMBRE': 0, 'MUJER': 0})
+    provisorio_raw = source_stats['raw_status_totals'].get('PROVISORIO', {'HOMBRE': 0, 'MUJER': 0})
+
+    return {
+        'total_profesiones': len(source_data),
+        'total_cargos': len(cargo_totals),
+        'total_hombres': int(permanent_totals.get('HOMBRE', 0)),
+        'total_mujeres': int(permanent_totals.get('MUJER', 0)),
+        'total_personas': int(permanent_totals.get('HOMBRE', 0)) + int(permanent_totals.get('MUJER', 0)),
+        'provisorio_detectado': int(provisorio_raw.get('HOMBRE', 0)) + int(provisorio_raw.get('MUJER', 0)),
+        'top_cargos': top_cargos,
+        'top_profesiones': top_professions,
+        'changes_made': changes_made,
+        'unmapped_count': len(unmapped),
+        'missing_count': len(missing_combinations),
+        'sheet_names': sheet_names,
+    }
+
+def cleanup_download_cache():
+    now = time.time()
+    expired = [token for token, item in DOWNLOAD_CACHE.items() if now - item['created_at'] > CACHE_TTL_SECONDS]
+    for token in expired:
+        DOWNLOAD_CACHE.pop(token, None)
+
+def store_download(output_filename, output_bytes):
+    cleanup_download_cache()
+    token = uuid4().hex
+    DOWNLOAD_CACHE[token] = {
+        'filename': output_filename,
+        'bytes': output_bytes,
+        'created_at': time.time(),
+    }
+    return token
+
 def process_files(source_path, target_path, output_path):
-    source_data = parse_source(source_path)
+    source_data, source_stats = parse_source(source_path)
     doc, all_rows, target_rows = parse_target(target_path)
+    sheet_names = [sheet.name for sheet in doc.sheets]
+    clean_broken_ref_formulas(all_rows)
+    reset_target_gender_columns(all_rows, target_rows)
     prof_map, unmapped = build_profession_map(source_data, target_rows)
 
     target_index = {}
@@ -198,11 +312,34 @@ def process_files(source_path, target_path, output_path):
                 missing_combinations.append({'source_prof': sp, 'target_prof': tp, 'cargo': cargo})
 
     doc.saveas(output_path)
+    summary = build_processing_summary(
+        source_data=source_data,
+        source_stats=source_stats,
+        changes_made=changes_made,
+        unmapped=unmapped,
+        missing_combinations=missing_combinations,
+        sheet_names=sheet_names,
+    )
     return {
         'changes_made': changes_made,
         'unmapped': unmapped,
         'missing_combinations': missing_combinations,
+        'summary': summary,
     }
+
+@app.route('/download/<token>', methods=['GET'])
+def download_processed_file(token):
+    item = DOWNLOAD_CACHE.pop(token, None)
+    if not item:
+        flash('El archivo ya no está disponible. Vuelve a procesar las planillas.', 'error')
+        return redirect(url_for('index'))
+
+    return send_file(
+        io.BytesIO(item['bytes']),
+        as_attachment=True,
+        download_name=item['filename'],
+        mimetype='application/vnd.oasis.opendocument.spreadsheet',
+    )
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -238,11 +375,13 @@ def index():
                 with open(output_path, 'rb') as f:
                     output_bytes = f.read()
 
-                return send_file(
-                    io.BytesIO(output_bytes),
-                    as_attachment=True,
-                    download_name=output_filename,
-                    mimetype='application/vnd.oasis.opendocument.spreadsheet',
+                download_token = store_download(output_filename, output_bytes)
+
+                return render_template(
+                    'index.html',
+                    result_summary=result['summary'],
+                    download_token=download_token,
+                    output_filename=output_filename,
                 )
             except Exception as e:
                 flash(f'Ocurrió un error: {str(e)}', 'error')

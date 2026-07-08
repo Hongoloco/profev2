@@ -17,6 +17,16 @@ def normalize_text(text):
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
+def detect_employment_status(value):
+    norm = normalize_text(value)
+    if not norm:
+        return None
+    if 'PROVIS' in norm:
+        return 'PROVISORIO'
+    if 'PERMAN' in norm:
+        return 'PERMANENTE'
+    return None
+
 def process_files(source_path, target_path):
     try:
         # 1. Read source data
@@ -24,11 +34,17 @@ def process_files(source_path, target_path):
         data = {}
         current_cargo = None
         current_prof = None
+        current_status = 'PERMANENTE'
 
         for index, row in df_prof.iterrows():
             val = str(row['Unnamed: 0']).strip()
             count = row['Unnamed: 1']
             if pd.isna(row['Unnamed: 0']) or val == 'nan' or val == 'Etiquetas de fila' or val == 'Total general':
+                continue
+
+            status = detect_employment_status(val)
+            if status:
+                current_status = status
                 continue
             
             if val.startswith('P.') and len(val.split('.')) == 3:
@@ -39,7 +55,9 @@ def process_files(source_path, target_path):
                         data[current_prof] = {}
                     if current_cargo not in data[current_prof]:
                         data[current_prof][current_cargo] = {}
-                    data[current_prof][current_cargo][val] = int(count)
+                    data[current_prof][current_cargo].setdefault(val, 0)
+                    # Regla de negocio: provisorio se suma al mismo total que permanente.
+                    data[current_prof][current_cargo][val] += int(count)
             else:
                 current_prof = val
 
@@ -120,12 +138,12 @@ def process_files(source_path, target_path):
                     if mujeres > 0:
                         row_cells[6].set_value(mujeres)
                     else:
-                        row_cells[6].set_value(None)
+                        row_cells[6].set_value('')
                         
                     if hombres > 0:
                         row_cells[7].set_value(hombres)
                     else:
-                        row_cells[7].set_value(None)
+                        row_cells[7].set_value('')
                     changes_made += 1
 
         # 6. Save as a new file
